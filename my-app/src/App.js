@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/App.js
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
@@ -9,10 +10,12 @@ import MainPage from './components/MainPage';
 import UserProfile from './components/UserProfile';
 import CreatePost from './components/CreatePost';
 import Navbar from './components/Navbar';
+import LoginForm from './components/LoginForm';
 
 const App = () => {
     const [isRegistered, setIsRegistered] = useState(false);
     const [hasTopWeb3NFT, setHasTopWeb3NFT] = useState(false);
+    const [user, setUser] = useState(null);
     const network = "https://api.devnet.solana.com";
     const wallets = [new PhantomWalletAdapter()];
 
@@ -20,11 +23,10 @@ const App = () => {
         setHasTopWeb3NFT(true); // Assuming the user has the NFT for demonstration
     };
 
-    useEffect(() => {
-        if (isRegistered) {
-            checkForTopWeb3NFT();
-        }
-    }, [isRegistered]);
+    const handleLogin = (userData) => {
+        setUser(userData);
+        setIsRegistered(true);
+    };
 
     return (
         <Router>
@@ -35,10 +37,11 @@ const App = () => {
                         <WalletMultiButton />
                         <Routes>
                             <Route path="/register" element={<RegistrationForm onRegister={() => setIsRegistered(true)} />} />
-                            <Route path="/main" element={isRegistered ? <MainPage /> : <Navigate to="/register" />} />
-                            <Route path="/profile/:phantomAddress" element={isRegistered ? <UserProfile /> : <Navigate to="/register" />} />
+                            <Route path="/login" element={<LoginForm onLogin={handleLogin} />} />
+                            <Route path="/main" element={isRegistered ? <MainPage /> : <Navigate to="/login" />} />
+                            <Route path="/profile/:phantomAddress" element={isRegistered ? <UserProfile /> : <Navigate to="/login" />} />
                             <Route path="/create-post" element={isRegistered && hasTopWeb3NFT ? <CreatePost /> : <Navigate to="/main" />} />
-                            <Route path="/" element={<Navigate to="/main" />} />
+                            <Route path="/" element={<Navigate to="/login" />} />
                         </Routes>
                     </WalletModalProvider>
                 </WalletProvider>

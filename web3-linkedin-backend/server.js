@@ -1,4 +1,3 @@
-// Other imports and setup
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -7,12 +6,13 @@ const { Connection, PublicKey, Keypair, SystemProgram, Transaction } = require('
 const { Program, AnchorProvider, Wallet } = require('@project-serum/anchor');
 const User = require('./userModel');
 const FriendRequest = require('./friendRequestModel');
+const Post = require('./postModel');
 const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 // MongoDB connection
-mongoose.connect('mongodb://localhost:27017', { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect('mongodb://localhost:27017/web3linkedin', { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.log(err));
 
@@ -34,13 +34,8 @@ const program = new Program(idl, programId, provider);
 
 // Endpoint to handle transaction submission
 app.post('/api/transactions/submit', async (req, res) => {
-    console.log('Received /api/transactions/submit request:', req.body);
     try {
         const { transaction: transactionBase64, profilePublicKey, name, bio, avatar, phantomAddress } = req.body;
-
-        if (!transactionBase64 || !profilePublicKey || !name || !bio || !avatar || !phantomAddress) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
 
         // Deserialize the transaction
         const transactionBuffer = Buffer.from(transactionBase64, 'base64');
@@ -69,7 +64,6 @@ app.post('/api/transactions/submit', async (req, res) => {
 
 // Endpoint to fetch user profile
 app.get('/api/users/profile/:phantomAddress', async (req, res) => {
-    console.log('Received /api/users/profile request:', req.params);
     try {
         const { phantomAddress } = req.params;
         const user = await User.findOne({ phantomAddress }).populate('friends');
@@ -85,7 +79,6 @@ app.get('/api/users/profile/:phantomAddress', async (req, res) => {
 
 // Endpoint to fetch available users
 app.get('/api/users/available/:phantomAddress', async (req, res) => {
-    console.log('Received /api/users/available request:', req.params);
     try {
         const { phantomAddress } = req.params;
         const user = await User.findOne({ phantomAddress });
@@ -105,30 +98,38 @@ app.get('/api/users/available/:phantomAddress', async (req, res) => {
 
 // Endpoint to send friend request
 app.post('/api/send-friend-request', async (req, res) => {
-    console.log('Received /api/send-friend-request request:', req.body);
     try {
         const { from, to } = req.body;
 
-        if (!from || !to) {
-            return res.status(400).json({ message: 'Missing required fields' });
+        if (!PublicKey.isOnCurve(from) || !PublicKey.isOnCurve(to)) {
+            throw new Error('Invalid public key');
         }
-
-        console.log('Sending friend request from:', from, 'to:', to);
 
         const sender = await User.findOne({ phantomAddress: from });
         const receiver = await User.findOne({ phantomAddress: to });
 
         if (!sender || !receiver) {
-            console.log('Sender or receiver not found');
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const existingRequest = await FriendRequest.findOne({ from, to });
-        if (existingRequest) {
-            return res.status(400).json({ message: 'Friend request already sent' });
-        }
+        const friendRequestAccount = Keypair.generate();
 
-        const friendRequest = new FriendRequest({ from, to });
+        await program.methods.sendFriendRequest()
+            .accounts({
+                friendRequest: friendRequestAccount.publicKey,
+                user: new PublicKey(from),
+                friend: new PublicKey(to),
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([walletKeypair, friendRequestAccount])
+            .rpc();
+
+        const friendRequest = new FriendRequest({
+            from,
+            to,
+            requestPublicKey: friendRequestAccount.publicKey.toString(),
+            status: 'Pending'
+        });
         await friendRequest.save();
 
         res.status(200).json({ message: 'Friend request sent successfully' });
@@ -140,21 +141,19 @@ app.post('/api/send-friend-request', async (req, res) => {
 
 // Endpoint to accept friend request
 app.post('/api/accept-friend-request', async (req, res) => {
-    console.log('Received /api/accept-friend-request request:', req.body);
     try {
         const { requestId } = req.body;
-
-        if (!requestId) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
-
         const friendRequest = await FriendRequest.findById(requestId);
 
         if (!friendRequest || friendRequest.status !== 'Pending') {
             return res.status(404).json({ message: 'Friend request not found or already processed' });
         }
 
-        const { from, to } = friendRequest;
+        const { from, to, requestPublicKey } = friendRequest;
+
+        if (!PublicKey.isOnCurve(from) || !PublicKey.isOnCurve(to) || !PublicKey.isOnCurve(requestPublicKey)) {
+            throw new Error('Invalid public key');
+        }
 
         const sender = await User.findOne({ phantomAddress: from });
         const receiver = await User.findOne({ phantomAddress: to });
@@ -163,25 +162,23 @@ app.post('/api/accept-friend-request', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Create and send a Solana transaction to confirm the friend request
-        const transaction = new Transaction().add(
-            program.methods.acceptFriendRequest()
-                .accounts({
-                    friendRequest: friendRequest._id,
-                    user: new PublicKey(from),
-                    friend: new PublicKey(to),
-                    systemProgram: SystemProgram.programId,
-                })
-                .instruction()
-        );
+        // Ensure the user has the token account and mint account set up
+        const mintPublicKey = new PublicKey('YOUR_MINT_PUBLIC_KEY'); // Replace with your mint public key
+        const tokenAccountPublicKey = new PublicKey('YOUR_TOKEN_ACCOUNT_PUBLIC_KEY'); // Replace with your token account public key
 
-        transaction.feePayer = new PublicKey(to);
-        transaction.recentBlockhash = (await connection.getRecentBlockhash()).blockhash;
-
-        const signedTransaction = await wallet.signTransaction(transaction);
-
-        const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-        await connection.confirmTransaction(signature);
+        await program.methods.acceptFriendRequest()
+            .accounts({
+                friendRequest: new PublicKey(requestPublicKey),
+                user: new PublicKey(from),
+                friend: new PublicKey(to),
+                systemProgram: SystemProgram.programId,
+                mint: mintPublicKey,
+                token_account: tokenAccountPublicKey,
+                token_program: Token.programId,
+                authority: wallet.publicKey,
+            })
+            .signers([walletKeypair])
+            .rpc();
 
         friendRequest.status = 'Accepted';
         await friendRequest.save();
@@ -198,17 +195,10 @@ app.post('/api/accept-friend-request', async (req, res) => {
     }
 });
 
-
 // Endpoint to reject friend request
 app.post('/api/reject-friend-request', async (req, res) => {
-    console.log('Received /api/reject-friend-request request:', req.body);
     try {
         const { requestId } = req.body;
-
-        if (!requestId) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
-
         const friendRequest = await FriendRequest.findById(requestId);
 
         if (!friendRequest || friendRequest.status !== 'Pending') {
@@ -224,20 +214,6 @@ app.post('/api/reject-friend-request', async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
-// Endpoint to view pending friend requests
-app.get('/api/users/pending-requests/:phantomAddress', async (req, res) => {
-    console.log('Received /api/users/pending-requests request:', req.params);
-    try {
-        const { phantomAddress } = req.params;
-        const pendingRequests = await FriendRequest.find({ to: phantomAddress, status: 'Pending' });
-        res.status(200).json(pendingRequests);
-    } catch (error) {
-        console.error('Error fetching pending requests:', error.message);
-        res.status(500).json({ message: error.message });
-    }
-});
-
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

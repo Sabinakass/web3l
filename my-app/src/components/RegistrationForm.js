@@ -1,9 +1,11 @@
+// src/components/RegistrationForm.js
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Connection, PublicKey, Keypair, SystemProgram, Transaction } from '@solana/web3.js';
 import { Program, AnchorProvider } from '@project-serum/anchor';
 import { Buffer } from 'buffer';
+import styled from 'styled-components';
 import idl from './idl.json';
 
 window.Buffer = window.Buffer || Buffer;
@@ -97,22 +99,93 @@ const RegistrationForm = ({ onRegister }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit}>
-            <label>Name:</label>
-            <input type="text" name="name" value={formData.name} onChange={handleChange} required />
+        <FormContainer onSubmit={handleSubmit}>
+            <FormLabel>Name:</FormLabel>
+            <FormInput type="text" name="name" value={formData.name} onChange={handleChange} required />
 
-            <label>Bio:</label>
-            <textarea name="bio" value={formData.bio} onChange={handleChange} required />
+            <FormLabel>Bio:</FormLabel>
+            <FormTextArea name="bio" value={formData.bio} onChange={handleChange} required />
 
-            <label>Profile Picture URL:</label>
-            <input type="text" name="avatar" value={formData.avatar} onChange={handleChange} required />
+            <FormLabel>Profile Picture URL:</FormLabel>
+            <FormInput type="text" name="avatar" value={formData.avatar} onChange={handleChange} required />
 
-            <label>Phantom Wallet Address:</label>
-            <input type="text" name="phantomAddress" value={formData.phantomAddress} readOnly />
+            <FormLabel>Phantom Wallet Address:</FormLabel>
+            <FormInput type="text" name="phantomAddress" value={formData.phantomAddress} readOnly />
 
-            <button type="submit">Register</button>
-        </form>
+            <SubmitButton type="submit">Register</SubmitButton>
+            <LoginLink>
+                Already have an account? <StyledLink to="/login">Login</StyledLink>
+            </LoginLink>
+        </FormContainer>
     );
 };
 
 export default RegistrationForm;
+
+// Styled-components
+const FormContainer = styled.form`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+`;
+
+const FormLabel = styled.label`
+    align-self: flex-start;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #333;
+`;
+
+const FormInput = styled.input`
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+`;
+
+const FormTextArea = styled.textarea`
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    resize: vertical;
+`;
+
+const SubmitButton = styled.button`
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+
+    &:hover {
+        background-color: #0056b3;
+    }
+`;
+
+const LoginLink = styled.p`
+    margin-top: 20px;
+    font-size: 14px;
+    color: #666;
+`;
+
+const StyledLink = styled(Link)`
+    color: #007bff;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+    }
+`;
