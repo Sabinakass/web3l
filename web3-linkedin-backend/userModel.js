@@ -6,8 +6,8 @@ const userSchema = new mongoose.Schema({
     avatar: String,
     phantomAddress: { type: String, unique: true },
     profilePublicKey: String,
-    friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-    friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    friends: [{ type: String }], // Changed to String
+    friendRequests: [{ type: String }],
 });
 
 const User = mongoose.model('User', userSchema);
